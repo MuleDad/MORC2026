@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Cruise Scheduler">
+<meta name="theme-color" content="#222222">
+<link rel="manifest" id="manifest-placeholder">
+<title>Cruise Scheduler</title>
+<style>
+body {
+  font-family: Arial;
+  margin:0;
+  background: var(--bg);
+  color: var(--text);
+}
+header { padding:10px; background:#222; color:#fff; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+button { padding:6px 10px; }
+
+:root {
+  --bg: #fdf6e3;
+  --text: #657b83;
+  --row-even: #eee8d5;
+  --row-odd: #fdf6e3;
+  --border-soft: #e0dac7;
+  --picked: #268bd2;   /* solarized blue */
+  --maybe: #93a1a1;
+  --hour-line: rgba(0,0,0,0.12);
+  --list-text: #657b83;
+}
+
+.dark {
+  --bg: #1e1e1e;
+  --text: #0a0a0a;
+  --row-even: #252526;
+  --row-odd: #1e1e1e;
+  --border-soft: #333;
+  --picked: #268bd2;   /* solarized blue */
+  --maybe: #93a1a1;
+  --hour-line: rgba(255,255,255,0.12);
+  --list-text: #d4d4d4;
+}
+
+.row { display:flex; border-bottom:1px solid #ddd; }
+.stage {
+  width:160px; min-width:160px;
+  box-sizing: border-box;
+  background:#f4f4f4;
+  border-right:1px solid #ccc;
+  padding:5px;
+  position:sticky;
+  left:0;
+  z-index:2;
+}
+
+.timeline {
+  position:relative;
+  height:60px;
+}
+
+.event {
+  position:absolute;
+  top:5px;
+  height:50px;
+  border-radius:6px;
+  padding:2px;
+  font-size:11px;
+  overflow:hidden;
+  cursor:pointer;
+  border:1px solid #333;
+  background:#eee;
+  box-sizing: border-box;
+}
+
+.picked { background:#2196f3; color:white; }
+.maybe { background:#ffb702; color:#242424; }
+.conflict {
+  border: 3px solid red !important;
+  box-shadow: 0 0 6px red;
+}
+
+/* Hour grid lines inside timeline rows */
+.hour-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--hour-line);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.timeHeader { display:flex; position:sticky; top:0; background:white; z-index:3; }
+.timeCell {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+.hour {
+  border-left: 2px solid var(--text);
+  font-weight: bold;
+}
+
+#list { padding:10px; }
+textarea { width:100%; height:200px; }
+
+#gridView {
+  overflow-x: auto;
+  overflow-y: auto;
+  cursor: grab;
+}
+#gridView:active {
+  cursor: grabbing;
+}
+
+/* ── Tooltip ─────────────────────────────────────────────── */
+#tooltip {
+  position: fixed;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+#tooltip.visible { opacity: 1; }
+</style>
+</head>
+
+<body>
+
+<header>
+<select id="daySelect"></select>
+<button onclick="showView('grid')">Grid</button>
+<button onclick="showView('list')">My Schedule</button>
+<button onclick="showView('edit')">Edit</button>
+<button onclick="zoomFit()">Fit Day</button>
+<button onclick="zoomIn()">+</button>
+<button onclick="zoomOut()">-</button>
+<button onclick="toggleTheme()">🌙</button>
+</header>
+
+<div id="tooltip"></div>
+<div id="gridView"></div>
+<div id="list" style="display:none;"></div>
+<div id="editView" style="display:none;">
+<textarea id="editor"></textarea>
+<button onclick="saveData()">Save</button>
+</div>
+
+<script>
+const BASE_PIXELS_PER_15 = 50;
+let zoom = 1;
+let isDragging = false;
+
+function pixels() {
+  return BASE_PIXELS_PER_15 * zoom;
+}
+
+const START_HOUR = 8;
+const END_HOUR = 25;
+
+let data = JSON.parse(localStorage.getItem("cruiseData")) || {
+  days: {
+    "Sunday": [
+      {time:"12:00 PM", band:"VIP Laminate Pickup", stage:"Q Smokehouse", duration:150},
+      {time:"1:00 PM", band:"Ted Poley", stage:"Social Night Club", duration:60},
+      {time:"1:00 PM", band:"Cassidy Paris", stage:"Spice H2O", duration:60},
+      {time:"1:30 PM", band:"Paradise Kitty", stage:"Atrium", duration:60},
+      {time:"1:30 PM", band:"Steelheart", stage:"Joy Theater", duration:60},
+      {time:"2:30 PM", band:"VIP Mix & Mingle", stage:"Q Smokehouse", duration:60},
+      {time:"4:30 PM", band:"Nelson", stage:"Pool Stage", duration:60},
+      {time:"5:00 PM", band:"Vain", stage:"Atrium", duration:60},
+      {time:"5:00 PM", band:"DJ Will", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"6:00 PM", band:"D-A-D", stage:"Joy Theater", duration:60},
+      {time:"6:00 PM", band:"Spread Eagle", stage:"Manhattan Room", duration:60},
+      {time:"6:00 PM", band:"Movie: Decline of Western Civilization", stage:"Q Smokehouse", duration:120},
+      {time:"6:00 PM", band:"Ellefson-Soto", stage:"Spice H2O", duration:60},
+      {time:"7:15 PM", band:"Marbin", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"7:45 PM", band:"Tuff", stage:"Atrium", duration:60},
+      {time:"7:45 PM", band:"The London Quireboys", stage:"Pool Stage", duration:60},
+      {time:"7:45 PM", band:"Anthony Corder", stage:"Social Night Club", duration:60},
+      {time:"8:00 PM", band:"Jared Roswell Hill", stage:"Observation Lounge", duration:60},
+      {time:"8:15 PM", band:"Dave Rude", stage:"Q Smokehouse", duration:60},
+      {time:"8:30 PM", band:"Crash Diet", stage:"Manhattan Room", duration:60},
+      {time:"8:30 PM", band:"Asomvel", stage:"Spice H2O", duration:60},
+      {time:"8:45 PM", band:"Quiet Riot", stage:"Joy Theater", duration:60},
+      {time:"9:30 PM", band:"Dueling Pianos", stage:"Q Smokehouse", duration:60},
+      {time:"9:45 PM", band:"The Party Ninjas", stage:"Social Night Club", duration:60},
+      {time:"10:30 PM", band:"Black N Blue", stage:"Atrium", duration:60},
+      {time:"10:30 PM", band:"Steven Adler", stage:"Pool Stage", duration:60},
+      {time:"10:30 PM", band:"DJ Will", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"11:00 PM", band:"Enuff Z'Nuff", stage:"Manhattan Room", duration:60},
+      {time:"11:00 PM", band:"Stone Whiskey", stage:"Spice H2O", duration:60},
+      {time:"11:30 PM", band:"Queensrÿche", stage:"Joy Theater", duration:60},
+      {time:"11:30 PM", band:"Karaoke", stage:"Q Smokehouse", duration:60},
+      {time:"11:45 PM", band:"Movie: Rock 'n Roll High School", stage:"Atrium", duration:120}
+    ],
+    "Monday": [
+      {time:"8:30 AM", band:"Boozy Bingo", stage:"Atrium", duration:60},
+      {time:"9:30 AM", band:"Metal Yoga", stage:"Spice H2O", duration:60},
+      {time:"9:45 AM", band:"Smuggler's Alley", stage:"Atrium", duration:60},
+      {time:"10:00 AM", band:"Night Ranger Q&A", stage:"Q Smokehouse", duration:60},
+      {time:"11:00 AM", band:"Photo: Dangerous Toys, Asomvel, D-A-D, The Almighty", stage:"Observation Lounge", duration:60},
+      {time:"11:15 AM", band:"Paint Class: Ozzy", stage:"Cagney's", duration:120},
+      {time:"11:30 AM", band:"Story Time of Ozzy", stage:"Q Smokehouse", duration:60},
+      {time:"12:00 PM", band:"Nestor", stage:"Joy Theater", duration:60},
+      {time:"12:00 PM", band:"Tuff", stage:"Manhattan Room", duration:60},
+      {time:"12:00 PM", band:"The Raven Age", stage:"Spice H2O", duration:60},
+      {time:"12:00 PM", band:"Stryper Q&A", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"1:00 PM", band:"Stone Whiskey", stage:"Q Smokehouse", duration:60},
+      {time:"1:15 PM", band:"Killer Dwarfs", stage:"Pool Stage", duration:60},
+      {time:"1:30 PM", band:"Photo: HCSS, Lita Ford, Steven Adler, The Darkness", stage:"Observation Lounge", duration:60},
+      {time:"2:30 PM", band:"Metal Catwalk", stage:"Atrium", duration:60},
+      {time:"3:00 PM", band:"Stryper", stage:"Joy Theater", duration:60},
+      {time:"3:00 PM", band:"Marbin", stage:"Social Night Club", duration:60},
+      {time:"3:00 PM", band:"Crazy Lixx", stage:"Spice H2O", duration:60},
+      {time:"3:15 PM", band:"Reb Beach Fusion", stage:"Manhattan Room", duration:60},
+      {time:"3:15 PM", band:"Rare Hare", stage:"Pool Stage", duration:60},
+      {time:"4:00 PM", band:"Photo: Loudness, Nelson, Saigon Kick, Soto/Ellefson, Y&T", stage:"Observation Lounge", duration:60},
+      {time:"5:00 PM", band:"Heavens Edge", stage:"Atrium", duration:60},
+      {time:"5:00 PM", band:"Robby Vegas", stage:"Social Night Club", duration:60},
+      {time:"5:00 PM", band:"Slaughter Q&A", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"6:00 PM", band:"Night Ranger", stage:"Joy Theater", duration:60},
+      {time:"6:00 PM", band:"Crash Diet", stage:"Manhattan Room", duration:60},
+      {time:"6:30 PM", band:"Black Label Society", stage:"Pool Stage", duration:60},
+      {time:"6:30 PM", band:"Steelheart", stage:"Spice H2O", duration:60},
+      {time:"7:30 PM", band:"Cassidy Paris", stage:"Atrium", duration:60},
+      {time:"7:30 PM", band:"Cruise Jam", stage:"Q Smokehouse", duration:60},
+      {time:"8:30 PM", band:"Tora Tora", stage:"Manhattan Room", duration:60},
+      {time:"8:30 PM", band:"Jared Roswell Hill", stage:"Observation Lounge", duration:60},
+      {time:"9:00 PM", band:"British Lion", stage:"Joy Theater", duration:60},
+      {time:"9:00 PM", band:"Vixen", stage:"Pool Stage", duration:60},
+      {time:"9:15 PM", band:"Beer Party", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"9:15 PM", band:"Punchlines & Backlines", stage:"Social Night Club", duration:60},
+      {time:"9:15 PM", band:"Soto", stage:"Spice H2O", duration:60},
+      {time:"10:00 PM", band:"Enuff Z'Nuff", stage:"Q Smokehouse", duration:60},
+      {time:"10:15 PM", band:"Vain", stage:"Atrium", duration:60},
+      {time:"11:00 PM", band:"Paradise Kitty", stage:"Manhattan Room", duration:60},
+      {time:"11:00 PM", band:"Faster Pussycat", stage:"Pool Stage", duration:60},
+      {time:"11:00 PM", band:"Marbin", stage:"Social Night Club", duration:60},
+      {time:"11:30 PM", band:"Symphony X", stage:"Joy Theater", duration:60},
+      {time:"11:30 PM", band:"Karaoke", stage:"Q Smokehouse", duration:60}
+      ],
+    "Tuesday": [
+      {time:"8:30 AM", band:"DJ Will MORC 5K", stage:"Pool Stage", duration:60},
+      {time:"9:45 AM", band:"Boozy Bingo", stage:"Atrium", duration:60},
+      {time:"1:30 PM", band:"Quiet Riot", stage:"Pool Stage", duration:60},
+      {time:"2:30 PM", band:"Photo Experience: Crazy Lixx / Enuff Z'Nuff / Reb Beach Fusion / Symphony X", stage:"Observation Lounge", duration:60},
+      {time:"3:00 PM", band:"The Almighty", stage:"Joy Theater", duration:60},
+      {time:"3:00 PM", band:"Trunk Nation with Eddie Trunk", stage:"Q Smokehouse", duration:60},
+      {time:"3:30 PM", band:"Black N Blue", stage:"Spice H2O", duration:60},
+      {time:"4:30 PM", band:"Loudness", stage:"Pool Stage", duration:60},
+      {time:"5:30 PM", band:"Black Label Society Q&A", stage:"Atrium", duration:60},
+      {time:"5:45 PM", band:"Nelson", stage:"Joy Theater", duration:60},
+      {time:"6:00 PM", band:"Photo Experience: Steve Harris / British Lion", stage:"Observation Lounge", duration:60},
+      {time:"6:00 PM", band:"Lita Ford Q&A", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"6:15 PM", band:"Marbin", stage:"Q Smokehouse", duration:60},
+      {time:"6:45 PM", band:"Nestor", stage:"Spice H2O", duration:60},
+      {time:"7:00 PM", band:"Tora Tora", stage:"Atrium", duration:60},
+      {time:"7:00 PM", band:"Album Covers Theme Night Contest", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"7:00 PM", band:"Robby Vegas", stage:"Social Night Club", duration:60},
+      {time:"8:00 PM", band:"Slaughter", stage:"Pool Stage", duration:60},
+      {time:"8:00 PM", band:"Izzy's Cruiser Takeover", stage:"Q Smokehouse", duration:60},
+      {time:"8:00 PM", band:"Y&T Q&A", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"8:30 PM", band:"Great White", stage:"Joy Theater", duration:60},
+      {time:"8:30 PM", band:"Jared Roswell Hill", stage:"Observation Lounge", duration:60},
+      {time:"9:00 PM", band:"Dangerous Toys", stage:"Manhattan Room", duration:60},
+      {time:"9:15 PM", band:"Mac Sabbath", stage:"Spice H2O", duration:60},
+      {time:"9:30 PM", band:"Punchlines and Backlines", stage:"Social Night Club", duration:60},
+      {time:"9:45 PM", band:"Saigon Kick", stage:"Atrium", duration:60},
+      {time:"10:00 PM", band:"Dueling Pianos", stage:"Q Smokehouse", duration:60},
+      {time:"11:00 PM", band:"Lita Ford", stage:"Joy Theater", duration:60},
+      {time:"11:00 PM", band:"Queensrÿche", stage:"Pool Stage", duration:60},
+      {time:"11:00 PM", band:"The Party Ninjas", stage:"Social Night Club", duration:60},
+      {time:"11:45 PM", band:"The Raven Age", stage:"Manhattan Room", duration:60},
+      {time:"12:00 AM", band:"Midnight Movie: Captain Ron", stage:"Atrium", duration:120},
+      {time:"12:00 AM", band:"Karaoke Madness", stage:"Q Smokehouse", duration:60}
+    ],
+    "Wednesday": [
+      {time:"9:30 AM", band:"Monster Metal Yoga", stage:"Pool Stage", duration:60},
+      {time:"10:30 AM", band:"Rockstar Paint Class: Ace Frehley", stage:"Cagney's", duration:90},
+      {time:"11:00 AM", band:"Ted Poley's Naughty Naughty Pool Party", stage:"Spice H2O", duration:60},
+      {time:"1:00 PM", band:"Rare Hare", stage:"Pool Stage", duration:60},
+      {time:"1:45 PM", band:"The Almighty Q&A", stage:"Atrium", duration:60},
+      {time:"2:30 PM", band:"Photo Experience: Crash Diet / Killer Dwarfs / London Quireboys / Tuff", stage:"Observation Lounge", duration:60},
+      {time:"3:00 PM", band:"Stone Whiskey", stage:"Atrium", duration:60},
+      {time:"3:00 PM", band:"Trunk Nation with Eddie Trunk", stage:"Q Smokehouse", duration:60},
+      {time:"3:30 PM", band:"Marbin", stage:"Social Night Club", duration:60},
+      {time:"3:30 PM", band:"Heavens Edge", stage:"Spice H2O", duration:60},
+      {time:"4:30 PM", band:"Great White", stage:"Pool Stage", duration:60},
+      {time:"5:00 PM", band:"Black Label Society", stage:"Joy Theater", duration:60},
+      {time:"5:30 PM", band:"Cassidy Paris", stage:"Manhattan Room", duration:60},
+      {time:"5:30 PM", band:"Hoekstra & Gibbs", stage:"Social Night Club", duration:60},
+      {time:"6:00 PM", band:"Cooking with Rockstars", stage:"Q Smokehouse", duration:60},
+      {time:"6:00 PM", band:"Crazy Lixx", stage:"Spice H2O", duration:60},
+      {time:"6:00 PM", band:"Metal Mix with DJ Will", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"6:30 PM", band:"Ellefson-Soto", stage:"Atrium", duration:60},
+      {time:"7:15 PM", band:"Robby Vegas", stage:"Social Night Club", duration:60},
+      {time:"7:30 PM", band:"Night Ranger", stage:"Pool Stage", duration:60},
+      {time:"8:00 PM", band:"The Darkness", stage:"Joy Theater", duration:60},
+      {time:"8:15 PM", band:"Spread Eagle", stage:"Manhattan Room", duration:60},
+      {time:"8:15 PM", band:"Don & Jim Comedy Show", stage:"Social Night Club", duration:60},
+      {time:"8:30 PM", band:"Vain", stage:"Spice H2O", duration:60},
+      {time:"9:30 PM", band:"Black N Blue", stage:"Atrium", duration:60},
+      {time:"9:30 PM", band:"Will Doughty of Poison", stage:"Q Smokehouse", duration:60},
+      {time:"10:00 PM", band:"Anthony Corder", stage:"Social Night Club", duration:60},
+      {time:"10:30 PM", band:"Lita Ford", stage:"Pool Stage", duration:60},
+      {time:"10:45 PM", band:"Stryper", stage:"Joy Theater", duration:60},
+      {time:"11:00 PM", band:"Hardcore Superstar", stage:"Manhattan Room", duration:60},
+      {time:"11:30 PM", band:"Karaoke Madness", stage:"Q Smokehouse", duration:60},
+      {time:"12:00 AM", band:"Midnight Movie: Fast Times at Ridgemont High", stage:"Atrium", duration:120}
+    ],
+    "Thursday": [
+      {time:"9:15 AM", band:"Boozy Bingo", stage:"Atrium", duration:60},
+      {time:"10:00 AM", band:"Photo Experience: Great White / Night Ranger / Steelheart / Stryper", stage:"Observation Lounge", duration:60},
+      {time:"10:30 AM", band:"Rockstar Paint Class: Blizzard of Ozz", stage:"Cagney's", duration:90},
+      {time:"10:45 AM", band:"Nelson Q&A / Book Signing", stage:"Atrium", duration:60},
+      {time:"11:00 AM", band:"Symphony X Q&A", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"11:15 AM", band:"Crazy Lixx", stage:"Pool Stage", duration:60},
+      {time:"12:00 PM", band:"Vixen", stage:"Joy Theater", duration:60},
+      {time:"12:00 PM", band:"Asomvel", stage:"Manhattan Room", duration:60},
+      {time:"12:00 PM", band:"Tuff", stage:"Spice H2O", duration:60},
+      {time:"12:30 PM", band:"Photo Experience: BLS / Cassidy Paris / Spread Eagle / Vain", stage:"Observation Lounge", duration:60},
+      {time:"1:00 PM", band:"Tora Tora", stage:"Atrium", duration:60},
+      {time:"1:00 PM", band:"So You Think You Can Shred", stage:"Q Smokehouse", duration:60},
+      {time:"1:00 PM", band:"Marbin", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"2:00 PM", band:"D-A-D", stage:"Pool Stage", duration:60},
+      {time:"2:00 PM", band:"Dangerous Toys", stage:"Spice H2O", duration:60},
+      {time:"2:30 PM", band:"Rockin' Cocktail Contest", stage:"Atrium", duration:60},
+      {time:"2:30 PM", band:"Y&T", stage:"Joy Theater", duration:60},
+      {time:"3:00 PM", band:"The Almighty", stage:"Manhattan Room", duration:60},
+      {time:"3:00 PM", band:"Trunk Nation with Eddie Trunk", stage:"Q Smokehouse", duration:60},
+      {time:"3:30 PM", band:"Charity Auction", stage:"Atrium", duration:60},
+      {time:"3:30 PM", band:"Jared Roswell Hill", stage:"Social Night Club", duration:60},
+      {time:"4:30 PM", band:"Crash Diet", stage:"Spice H2O", duration:60},
+      {time:"4:30 PM", band:"Tora Tora Q&A", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"5:00 PM", band:"The Darkness", stage:"Pool Stage", duration:60},
+      {time:"5:15 PM", band:"Steven Adler", stage:"Joy Theater", duration:60},
+      {time:"5:45 PM", band:"The London Quireboys", stage:"Manhattan Room", duration:60},
+      {time:"6:00 PM", band:"Reb Beach Fusion Band", stage:"Atrium", duration:60},
+      {time:"6:00 PM", band:"Marbin", stage:"Social Night Club", duration:60},
+      {time:"7:00 PM", band:"Dave Rude and the Bad Motherfuckers", stage:"Q Smokehouse", duration:60},
+      {time:"7:00 PM", band:"Heavens Edge", stage:"Spice H2O", duration:60},
+      {time:"7:30 PM", band:"Metal Mix with DJ Will", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"7:30 PM", band:"British Lion", stage:"Pool Stage", duration:60},
+      {time:"8:00 PM", band:"2027 Cabin Giveaway", stage:"Atrium", duration:30},
+      {time:"8:00 PM", band:"Loudness", stage:"Joy Theater", duration:60},
+      {time:"8:30 PM", band:"Enuff Z'Nuff", stage:"Atrium", duration:60},
+      {time:"8:30 PM", band:"Hoekstra & Gibbs", stage:"Social Night Club", duration:60},
+      {time:"9:00 PM", band:"Jared Roswell Hill", stage:"Observation Lounge", duration:60},
+      {time:"9:15 PM", band:"Faster Pussycat", stage:"Manhattan Room", duration:60},
+      {time:"9:30 PM", band:"Hardcore Superstar", stage:"Spice H2O", duration:60},
+      {time:"9:45 PM", band:"Punchlines and Backlines", stage:"Social Night Club", duration:60},
+      {time:"10:15 PM", band:"Symphony X", stage:"Pool Stage", duration:60},
+      {time:"10:45 PM", band:"Slaughter", stage:"Joy Theater", duration:60},
+      {time:"11:00 PM", band:"Killer Dwarfs", stage:"Atrium", duration:60},
+      {time:"11:30 PM", band:"Mac Sabbath", stage:"Manhattan Room", duration:60},
+      {time:"11:30 PM", band:"Karaoke Madness", stage:"Q Smokehouse", duration:60}
+      ]
+  },
+  stageOrder: [
+      "Pool Stage",  
+      "Spice H2O",
+      "Joy Theater",      
+      "Manhattan Room",
+      "Atrium",
+      "Q Smokehouse",
+      "Social Night Club",
+      "Sugarcane Mojito Bar",
+      "Observation Lounge"
+    ]
+};
+
+let state = JSON.parse(localStorage.getItem("cruiseState")) || {};
+
+function saveState() {
+  localStorage.setItem("cruiseState", JSON.stringify(state));
+}
+
+function parseTime(t) {
+  let [time, mod] = t.split(" ");
+  let [h, m] = time.split(":").map(Number);
+  if (mod === "PM" && h !== 12) h += 12;
+  if (mod === "AM" && h === 12) h = 0;
+  return h*60 + m;
+}
+
+function cycle(id) {
+  state[id] = (state[id] + 1 || 1) % 3;
+  saveState();
+  render();
+}
+
+function render() {
+  renderGrid();
+  renderList();
+}
+
+function renderGrid() {
+  const container = document.getElementById("gridView");
+  container.innerHTML = "";
+
+  const day = document.getElementById("daySelect").value;
+  const events = data.days[day];
+
+  // Use stageOrder if defined, then append any stages not listed
+  const discovered = [...new Set(events.map(e=>e.stage))];
+  const order = data.stageOrder || [];
+  const stages = [
+    ...order.filter(s => discovered.includes(s)),
+    ...discovered.filter(s => !order.includes(s))
+  ];
+
+  // ── Time header ──────────────────────────────────────────────
+  const header = document.createElement("div");
+  header.className = "timeHeader";
+
+  // Spacer that matches the sticky stage column
+  const stageSpacer = document.createElement("div");
+  stageSpacer.style.cssText = "width:160px; min-width:160px; flex-shrink:0;";
+  header.appendChild(stageSpacer);
+
+  for (let h = START_HOUR; h < END_HOUR; h++) {
+    for (let m of [0,15,30,45]) {
+      const cell = document.createElement("div");
+      cell.className = "timeCell" + (m === 0 ? " hour" : "");
+      // Width is set via box-sizing:border-box, so border is included
+      cell.style.width = pixels() + "px";
+      cell.style.height = "20px";
+      cell.style.fontSize = "11px";
+      cell.style.overflow = "visible";
+      cell.style.whiteSpace = "nowrap";
+      cell.style.position = "relative";
+      cell.style.zIndex = "1";
+      if (m === 0) {
+        const displayH = h % 24;
+        const label = displayH === 0 ? "12:00 AM"
+          : displayH < 12 ? displayH + ":00 AM"
+          : displayH === 12 ? "12:00 PM"
+          : (displayH - 12) + ":00 PM";
+        cell.innerText = label;
+      }
+      header.appendChild(cell);
+    }
+  }
+
+  container.appendChild(header);
+
+  // ── Stage rows ───────────────────────────────────────────────
+  const totalMinutes = (END_HOUR - START_HOUR) * 60;
+  const totalBlocks  = totalMinutes / 15;
+  const timelineWidth = totalBlocks * pixels();
+
+  stages.forEach(stage => {
+    const row = document.createElement("div");
+    row.className = "row";
+
+    const label = document.createElement("div");
+    label.className = "stage";
+    label.innerText = stage;
+    row.appendChild(label);
+
+    const timeline = document.createElement("div");
+    timeline.className = "timeline";
+    timeline.style.width = timelineWidth + "px";
+
+    // Soft vertical hour lines
+    for (let h = 0; h < (END_HOUR - START_HOUR); h++) {
+      const line = document.createElement("div");
+      line.className = "hour-line";
+      line.style.left = (h * 4 * pixels()) + "px";
+      timeline.appendChild(line);
+    }
+
+    // Events
+    events.forEach((e, idx) => {
+      if (e.stage !== stage) return;
+
+      const start  = parseTime(e.time);
+      const left   = ((start - START_HOUR * 60) / 15) * pixels();
+      const width  = (e.duration / 15) * pixels();
+      const id     = day + "_" + idx;
+
+      const div = document.createElement("div");
+      div.dataset.id = id;
+      div.className = "event";
+      if (state[id] === 1) div.classList.add("picked");
+      if (state[id] === 2) div.classList.add("maybe");
+
+      div.style.left  = left + "px";
+      div.style.width = width + "px";
+      div.innerText   = e.band;
+      div.onclick = () => {
+        if (isDragging) return;
+        cycle(id);
+      };
+      attachTooltip(div, e.band + " — " + e.time);
+
+      timeline.appendChild(div);
+    });
+
+    row.appendChild(timeline);
+    container.appendChild(row);
+  });
+
+  detectConflicts(events, day);
+}
+
+function detectConflicts(events, day) {
+  // Clear old conflicts
+  document.querySelectorAll(".event").forEach(e => e.classList.remove("conflict"));
+
+  // Build picked list WITH DOM references
+  const picked = events.map((e, i) => {
+    const id = day + "_" + i;
+    const el = document.querySelector(`.event[data-id="${id}"]`);
+
+    return {
+      ...e,
+      id,
+      el,
+      start: parseTime(e.time),
+      end: parseTime(e.time) + e.duration
+    };
+  }).filter(e => state[e.id] === 1 && e.el);
+
+  // Compare every pair
+  for (let i = 0; i < picked.length; i++) {
+    for (let j = i + 1; j < picked.length; j++) {
+
+      const a = picked[i];
+      const b = picked[j];
+
+      if (a.start < b.end && b.start < a.end) {
+        a.el.classList.add("conflict");
+        b.el.classList.add("conflict");
+      }
+    }
+  }
+}
+
+function renderList() {
+  const container = document.getElementById("list");
+  container.innerHTML = "";
+  container.style.color = "var(--list-text)";
+
+  const day = document.getElementById("daySelect").value;
+  const events = data.days[day];
+
+  // Include BOTH picked (1) and maybe (2)
+  const selected = events.map((e,i)=>({...e,id:day+"_"+i}))
+    .filter(e=>state[e.id] === 1 || state[e.id] === 2)
+    .sort((a,b)=>parseTime(a.time)-parseTime(b.time));
+
+  // Header row
+  const header = document.createElement("div");
+  header.style.display = "grid";
+  header.style.gridTemplateColumns = "100px 1fr 160px 80px";
+  header.style.fontWeight = "bold";
+  header.style.marginBottom = "8px";
+
+  header.innerHTML = "<div>Time</div><div>Band</div><div>Stage</div><div>Status</div>";
+  container.appendChild(header);
+
+  // Rows
+  selected.forEach((e, index) => {
+    const div = document.createElement("div");
+
+    div.style.display = "grid";
+    div.style.gridTemplateColumns = "100px 1fr 160px 80px";
+    div.style.gap = "10px";
+    div.style.padding = "6px 4px";
+
+    // alternating rows
+    div.style.background = index % 2 === 0 ? "var(--row-even)" : "var(--row-odd)";
+    div.style.borderBottom = "1px solid var(--border-soft)";
+
+    const time = document.createElement("div");
+    time.innerText = e.time;
+
+    const band = document.createElement("div");
+    band.innerText = e.band;
+
+    const stage = document.createElement("div");
+    stage.innerText = e.stage;
+
+    const status = document.createElement("div");
+    status.innerText =
+      state[e.id] === 1 ? "Picked" :
+      state[e.id] === 2 ? "Maybe" : "";
+
+    status.style.color =
+      state[e.id] === 1 ? "var(--picked)" :
+      state[e.id] === 2 ? "var(--maybe)" : "";
+
+    div.append(time, band, stage, status);
+    container.appendChild(div);
+  });
+}
+
+function showView(v) {
+  document.getElementById("gridView").style.display  = v === "grid" ? "block" : "none";
+  document.getElementById("list").style.display      = v === "list" ? "block" : "none";
+  document.getElementById("editView").style.display  = v === "edit" ? "block" : "none";
+
+  if (v==="edit") document.getElementById("editor").value = JSON.stringify(data, null, 2);
+}
+
+function saveData() {
+  data = JSON.parse(document.getElementById("editor").value);
+  localStorage.setItem("cruiseData", JSON.stringify(data));
+  render();
+}
+
+function zoomIn()  { zoom *= 1.25; render(); }
+function zoomOut() { zoom /= 1.25; render(); }
+function zoomFit() { zoom = 0.4;   render(); } // zoomed way out
+
+
+function init() {
+  const sel = document.getElementById("daySelect");
+  Object.keys(data.days).forEach(d=>{
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.innerText = d;
+    sel.appendChild(opt);
+  });
+  sel.onchange = render;
+  zoomFit();
+}
+
+// ── Drag to scroll ───────────────────────────────────────────────
+let isDown = false;
+let startX;
+let scrollLeft;
+const grid = document.getElementById("gridView");
+
+grid.addEventListener("mousedown", e => {
+  isDown = true;
+  isDragging = false;
+  startX = e.pageX - grid.offsetLeft;
+  scrollLeft = grid.scrollLeft;
+});
+
+grid.addEventListener("mouseleave", () => { isDown = false; });
+grid.addEventListener("mouseup",    () => { isDown = false; });
+grid.addEventListener("mousemove",  e => {
+  if (!isDown) return;
+  isDragging = true;
+  e.preventDefault();
+  const x = e.pageX - grid.offsetLeft;
+  grid.scrollLeft = scrollLeft - (x - startX) * 1.5;
+});
+
+// ── Pinch to zoom ────────────────────────────────────────────────
+let initialDistance = null;
+let initialZoom = 1;
+
+grid.addEventListener("touchstart", e => {
+  if (e.touches.length === 2) {
+    initialDistance = getDistance(e.touches);
+    initialZoom = zoom;
+  }
+});
+
+grid.addEventListener("touchmove", e => {
+  if (e.touches.length === 2 && initialDistance) {
+    e.preventDefault();
+    const scale = getDistance(e.touches) / initialDistance;
+    zoom = Math.min(3, Math.max(0.3, initialZoom * scale));
+    render();
+  }
+}, { passive: false });
+
+grid.addEventListener("mouseup",   snapScroll);
+grid.addEventListener("touchend",  snapScroll);
+
+function snapScroll() {
+  const block   = pixels(); // width of 15-min block
+  const snapped = Math.round(grid.scrollLeft / block) * block;
+  grid.scrollTo({
+    left: snapped,
+    behavior: "smooth"
+  });
+}
+
+function getDistance(touches) {
+  const dx = touches[0].pageX - touches[1].pageX;
+  const dy = touches[0].pageY - touches[1].pageY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// ── Theme ────────────────────────────────────────────────────────
+function toggleTheme() {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
+}
+
+// load saved theme
+if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
+
+
+// ── Tooltip ───────────────────────────────────────────────
+const tooltip = document.getElementById("tooltip");
+let longPressTimer = null;
+
+function showTooltip(text, x, y) {
+  tooltip.innerText = text;
+  tooltip.style.left = (x + 12) + "px";
+  tooltip.style.top  = (y + 12) + "px";
+  tooltip.classList.add("visible");
+}
+
+function hideTooltip() {
+  tooltip.classList.remove("visible");
+  clearTimeout(longPressTimer);
+  longPressTimer = null;
+}
+
+function attachTooltip(el, text) {
+  // Mouse hover
+  el.addEventListener("mouseenter", e => showTooltip(text, e.clientX, e.clientY));
+  el.addEventListener("mousemove",  e => {
+    tooltip.style.left = (e.clientX + 12) + "px";
+    tooltip.style.top  = (e.clientY + 12) + "px";
+  });
+  el.addEventListener("mouseleave", hideTooltip);
+
+  // Long press (mobile)
+  el.addEventListener("touchstart", e => {
+    const t = e.touches[0];
+    longPressTimer = setTimeout(() => {
+      showTooltip(text, t.clientX, t.clientY);
+    }, 500);
+  }, { passive: true });
+  el.addEventListener("touchend",   hideTooltip);
+  el.addEventListener("touchmove",  hideTooltip);
+}
+
+init();
+
+// ── PWA: Manifest (injected as blob so single-file works) ────────
+const manifestData = {
+  name: "MORC 2026 Cruise Scheduler",
+  short_name: "Cruise 2026",
+  description: "Metal on the Cruise 2026 schedule planner",
+  start_url: ".",
+  display: "standalone",
+  background_color: "#222222",
+  theme_color: "#222222",
+  icons: [
+    {
+      src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23222'/><text y='72' x='50' text-anchor='middle' font-size='60'>🤘</text></svg>",
+      sizes: "any",
+      type: "image/svg+xml"
+    }
+  ]
+};
+const manifestBlob = new Blob([JSON.stringify(manifestData)], {type: "application/json"});
+document.getElementById("manifest-placeholder").href = URL.createObjectURL(manifestBlob);
+
+// ── PWA: Service Worker (injected as blob so single-file works) ──
+const CACHE_NAME = "cruise-2026-v1";
+
+const swCode = `
+const CACHE_NAME = "${CACHE_NAME}";
+
+self.addEventListener("install", event => {
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.add(self.location.href.split("?")[0]);
+    })
+  );
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener("fetch", event => {
+  event.respondWith(
+    caches.match(event.request).then(cached => cached || fetch(event.request))
+  );
+});
+`;
+
+if ("serviceWorker" in navigator) {
+  const swBlob = new Blob([swCode], { type: "application/javascript" });
+  const swURL  = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swURL, { scope: "./" })
+    .then(reg => console.log("SW registered, scope:", reg.scope))
+    .catch(err => console.warn("SW registration failed:", err));
+}
+
+</script>
+</body>
+</html>
