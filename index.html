@@ -206,13 +206,16 @@ let data = JSON.parse(localStorage.getItem("cruiseData")) || {
       {time:"9:30 AM", band:"Metal Yoga", stage:"Spice H2O", duration:60},
       {time:"9:45 AM", band:"Smuggler's Alley", stage:"Atrium", duration:60},
       {time:"10:00 AM", band:"Night Ranger Q&A", stage:"Q Smokehouse", duration:60},
+      {time:"10:30 AM", band:"Joel Bloody Mary Jam", stage:"Pool Stage", duration:60},
       {time:"11:00 AM", band:"Photo: Dangerous Toys, Asomvel, D-A-D, The Almighty", stage:"Observation Lounge", duration:60},
       {time:"11:15 AM", band:"Paint Class: Ozzy", stage:"Cagney's", duration:120},
       {time:"11:30 AM", band:"Story Time of Ozzy", stage:"Q Smokehouse", duration:60},
       {time:"12:00 PM", band:"Nestor", stage:"Joy Theater", duration:60},
+      {time:"12:00 PM", band:"VIP pick up", stage:"Social Night Club", duration:120},
       {time:"12:00 PM", band:"Tuff", stage:"Manhattan Room", duration:60},
       {time:"12:00 PM", band:"The Raven Age", stage:"Spice H2O", duration:60},
       {time:"12:00 PM", band:"Stryper Q&A", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"12:30 PM", band:"Monster Feud", stage:"Atrium", duration:60},
       {time:"1:00 PM", band:"Stone Whiskey", stage:"Q Smokehouse", duration:60},
       {time:"1:15 PM", band:"Killer Dwarfs", stage:"Pool Stage", duration:60},
       {time:"1:30 PM", band:"Photo: HCSS, Lita Ford, Steven Adler, The Darkness", stage:"Observation Lounge", duration:60},
@@ -230,13 +233,14 @@ let data = JSON.parse(localStorage.getItem("cruiseData")) || {
       {time:"6:00 PM", band:"Crashdïet", stage:"Manhattan Room", duration:60},
       {time:"6:30 PM", band:"Black Label Society", stage:"Pool Stage", duration:60},
       {time:"6:30 PM", band:"Steelheart", stage:"Spice H2O", duration:60},
+      {time:"7:00 PM", band:"Spike of London Quireboys", stage:"Social Night Club", duration:60},
       {time:"7:30 PM", band:"Cassidy Paris", stage:"Atrium", duration:60},
-      {time:"7:30 PM", band:"Cruise Jam", stage:"Q Smokehouse", duration:60},
+      {time:"7:30 PM", band:"Izzy's Cruise Jam", stage:"Q Smokehouse", duration:60},
       {time:"8:30 PM", band:"Tora Tora", stage:"Manhattan Room", duration:60},
       {time:"8:30 PM", band:"Jared Roswell Hill", stage:"Observation Lounge", duration:60},
       {time:"9:00 PM", band:"British Lion", stage:"Joy Theater", duration:60},
       {time:"9:00 PM", band:"Vixen", stage:"Pool Stage", duration:60},
-      {time:"9:15 PM", band:"Beer Party", stage:"Sugarcane Mojito Bar", duration:60},
+      {time:"9:00 PM", band:"Dumb Drinking Games", stage:"Sugarcane Mojito Bar", duration:60},
       {time:"9:15 PM", band:"Punchlines & Backlines", stage:"Social Night Club", duration:60},
       {time:"9:15 PM", band:"Soto", stage:"Spice H2O", duration:60},
       {time:"10:00 PM", band:"Enuff Z'Nuff", stage:"Q Smokehouse", duration:60},
@@ -245,7 +249,8 @@ let data = JSON.parse(localStorage.getItem("cruiseData")) || {
       {time:"11:00 PM", band:"Faster Pussycat", stage:"Pool Stage", duration:60},
       {time:"11:00 PM", band:"Marbin", stage:"Social Night Club", duration:60},
       {time:"11:30 PM", band:"Symphony X", stage:"Joy Theater", duration:60},
-      {time:"11:30 PM", band:"Karaoke", stage:"Q Smokehouse", duration:60}
+      {time:"11:30 PM", band:"Karaoke", stage:"Q Smokehouse", duration:60},
+      {time:"11:45 PM", band:"Movie: Captain Ron", stage:"Atrium", duration:120}
       ],
     "Tuesday": [
       {time:"8:30 AM", band:"DJ Will MORC 5K", stage:"Pool Stage", duration:60},
@@ -279,8 +284,8 @@ let data = JSON.parse(localStorage.getItem("cruiseData")) || {
       {time:"11:00 PM", band:"Queensrÿche", stage:"Pool Stage", duration:60},
       {time:"11:00 PM", band:"The Party Ninjas", stage:"Social Night Club", duration:60},
       {time:"11:45 PM", band:"The Raven Age", stage:"Manhattan Room", duration:60},
-      {time:"12:00 AM", band:"Midnight Movie: Captain Ron", stage:"Atrium", duration:120},
-      {time:"12:00 AM", band:"Karaoke Madness", stage:"Q Smokehouse", duration:60}
+      {time:"11:45 PM", band:"Midnight Movie: Spinal Tap", stage:"Atrium", duration:120},
+      {time:"11:45 PM", band:"Karaoke Madness", stage:"Q Smokehouse", duration:120}
     ],
     "Wednesday": [
       {time:"9:30 AM", band:"Monster Metal Yoga", stage:"Pool Stage", duration:60},
@@ -314,7 +319,7 @@ let data = JSON.parse(localStorage.getItem("cruiseData")) || {
       {time:"10:45 PM", band:"Stryper", stage:"Joy Theater", duration:60},
       {time:"11:00 PM", band:"Hardcore Superstar", stage:"Manhattan Room", duration:60},
       {time:"11:30 PM", band:"Karaoke Madness", stage:"Q Smokehouse", duration:60},
-      {time:"12:00 AM", band:"Midnight Movie: Fast Times at Ridgemont High", stage:"Atrium", duration:120}
+      {time:"11:45 PM", band:"Midnight Movie: Fast Times at Ridgemont High", stage:"Atrium", duration:120}
     ],
     "Thursday": [
       {time:"9:15 AM", band:"Boozy Bingo", stage:"Atrium", duration:60},
@@ -323,7 +328,7 @@ let data = JSON.parse(localStorage.getItem("cruiseData")) || {
       {time:"10:45 AM", band:"Nelson Q&A / Book Signing", stage:"Atrium", duration:60},
       {time:"11:00 AM", band:"Symphony X Q&A", stage:"Sugarcane Mojito Bar", duration:60},
       {time:"11:15 AM", band:"Crazy Lixx", stage:"Pool Stage", duration:60},
-      {time:"12:00 PM", band:"Vixen", stage:"Joy Theater", duration:60},
+      {time:"12:00 PM", band:"British Lion", stage:"Joy Theater", duration:60},
       {time:"12:00 PM", band:"Asomvel", stage:"Manhattan Room", duration:60},
       {time:"12:00 PM", band:"Tuff", stage:"Spice H2O", duration:60},
       {time:"12:30 PM", band:"Photo Experience: BLS / Cassidy Paris / Spread Eagle / Vain", stage:"Observation Lounge", duration:60},
@@ -348,7 +353,7 @@ let data = JSON.parse(localStorage.getItem("cruiseData")) || {
       {time:"7:00 PM", band:"Dave Rude and the Bad Motherfuckers", stage:"Q Smokehouse", duration:60},
       {time:"7:00 PM", band:"Heavens Edge", stage:"Spice H2O", duration:60},
       {time:"7:30 PM", band:"Metal Mix with DJ Will", stage:"Sugarcane Mojito Bar", duration:60},
-      {time:"7:30 PM", band:"British Lion", stage:"Pool Stage", duration:60},
+      {time:"7:30 PM", band:"Vixen", stage:"Pool Stage", duration:60},
       {time:"8:00 PM", band:"2027 Cabin Giveaway", stage:"Atrium", duration:30},
       {time:"8:00 PM", band:"Loudness", stage:"Joy Theater", duration:60},
       {time:"8:30 PM", band:"Enuff Z'Nuff", stage:"Atrium", duration:60},
@@ -361,7 +366,8 @@ let data = JSON.parse(localStorage.getItem("cruiseData")) || {
       {time:"10:45 PM", band:"Slaughter", stage:"Joy Theater", duration:60},
       {time:"11:00 PM", band:"Killer Dwarfs", stage:"Atrium", duration:60},
       {time:"11:30 PM", band:"Mac Sabbath", stage:"Manhattan Room", duration:60},
-      {time:"11:30 PM", band:"Karaoke Madness", stage:"Q Smokehouse", duration:60}
+      {time:"11:30 PM", band:"Karaoke Madness", stage:"Q Smokehouse", duration:60},
+      {time:"11:45 PM", band:"Movie: Chopper Chicks in Zombietown", stage:"Atrium", duration:120}
       ]
   },
   stageOrder: [
